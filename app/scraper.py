@@ -86,9 +86,9 @@ def get_articles(limit=10):
         sentiment, score = simple_sentiment(title)
 
         articles.append({
-            "title": title,
-            "url": href,
-            "assets": detect_assets(title),
+            "titre": title,
+            "lien": href,
+            "actifs": detect_assets(title),
             "sentiment": sentiment,
             "score": score
         })
