@@ -19,9 +19,11 @@ def detect_assets(title):
         "IAM": ["maroc telecom"]
     }
 
+    title_lower = title.lower()
+
     for asset, words in keywords.items():
         for w in words:
-            if w in title.lower():
+            if w in title_lower:
                 assets.append(asset)
                 break
 
@@ -50,6 +52,32 @@ def simple_sentiment(title):
         return "negative", score
     else:
         return "neutral", 0
+
+
+def estimate_price_trend(articles):
+    trend = {}
+
+    for a in articles:
+        for asset in a["assets"]:
+            trend.setdefault(asset, 0)
+            trend[asset] += a["score"]
+
+    result = {}
+
+    for asset, score in trend.items():
+        if score > 0:
+            direction = "hausse"
+        elif score < 0:
+            direction = "baisse"
+        else:
+            direction = "stable"
+
+        result[asset] = {
+            "direction": direction,
+            "force": abs(score)
+        }
+
+    return result
 
 
 def get_articles(limit=10):
@@ -86,9 +114,9 @@ def get_articles(limit=10):
         sentiment, score = simple_sentiment(title)
 
         articles.append({
-            "titre": title,
-            "lien": href,
-            "actifs": detect_assets(title),
+            "title": title,
+            "url": href,
+            "assets": detect_assets(title),
             "sentiment": sentiment,
             "score": score
         })
