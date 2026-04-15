@@ -185,6 +185,98 @@ def fetch_tradingview_indices() -> tuple[list[dict] | None, str | None]:
         return None, str(e)
 
 
+def fetch_top_performers(
+    period: str = "day", limit: int = 10, min_volume: int = 500
+) -> tuple[list[dict] | None, str | None]:
+    """
+    Fetch top gainers for a specific period (day, week, month).
+    Filters by minimum volume to ensure liquidity.
+    """
+    col_map = {
+        "day":   "change",
+        "week":  "Perf.W",
+        "month": "Perf.1M"
+    }
+    sort_col = col_map.get(period, "change")
+    
+    payload = {
+        "filter": [
+            {"left": "exchange", "operation": "equal", "right": "CSEMA"},
+            {"left": "volume", "operation": "greater", "right": min_volume},
+            {"left": "type", "operation": "equal", "right": "stock"}
+        ],
+        "options": {"lang": "en"},
+        "columns": [
+            "name", "close", "change", "Perf.W", "Perf.1M",
+            "market_cap_basic", "volume", "description", "sector"
+        ],
+        "sort": {"sortBy": sort_col, "sortOrder": "desc"},
+        "range": [0, limit]
+    }
+    
+    try:
+        r = _SESSION.post(
+            TRADINGVIEW_SCANNER_URL,
+            json=payload,
+            timeout=15,
+            verify=VERIFY_SSL
+        )
+        r.raise_for_status()
+        data = r.json().get("data", [])
+        
+        out = []
+        for item in data:
+            d = item.get("d", [])
+            out.append({
+                "ticker":            item.get("s", "").replace("CSEMA:", ""),
+                "name":              d[0],
+                "price":             d[1],
+                "change_day":        d[2],
+                "change_week":       d[3],
+                "change_month":      d[4],
+                "market_cap":        d[5],
+                "volume_24h":        d[6],
+                "description":       d[7],
+                "sector":            d[8],
+                "source":            "tradingview"
+            })
+        return out, None
+    except Exception as e:
+        logger.error("fetch_top_performers (%s) failed: %s", period, e)
+        return None, str(e)
+
+
+def generate_market_analysis(items: list[dict], period: str) -> dict:
+    """
+    Generates a localized (French) analysis and advice based on performers.
+    """
+    if not items:
+        return {
+            "analyse": "Données insuffisantes pour une analyse détaillée.",
+            "conseil": "Prudence recommandée. Attendre une confirmation des volumes."
+        }
+    
+    avg_perf = sum(abs(i.get(f"change_{period}") or 0) for i in items) / len(items)
+    
+    period_label = {"day": "séance", "week": "semaine", "month": "mois"}.get(period, "période")
+    
+    # Heuristic analysis
+    if avg_perf > 10:
+        analyse = f"Forte volatilité haussière constatée sur cette {period_label}. Les leaders affichent des gains exceptionnels."
+        conseil = "Attention aux prises de bénéfices (pullback) imminent. Ne pas chasser les prix déjà en surachat."
+    elif avg_perf > 3:
+        analyse = f"Dynamique positive confirmée sur la {period_label}. Le marché semble bien orienté avec des flux acheteurs réguliers."
+        conseil = "Privilégier les titres avec des fondamentaux solides qui accompagnent le mouvement."
+    else:
+        analyse = f"Marché calme ou en consolidation sur cette {period_label}."
+        conseil = "Accumulation sélective possible sur les supports techniques. Surveiller le réveil des volumes."
+        
+    return {
+        "analyse": analyse,
+        "conseil": conseil
+    }
+
+
 # ── CasablancaBourse.com scraper (fallback) ───────────────────────────────────
 
 def fetch_casabourse_indices() -> tuple[list[dict] | None, str | None]:
@@ -248,7 +340,9 @@ def _normalise_stock(row: dict) -> dict:
         "ticker":            row.get("ticker"),
         "name":              row.get("name"),
         "price":             row.get("price"),
-        "variation_percent": row.get("variation_percent"),
+        "variation_percent": row.get("variation_percent") or row.get("change_day"),
+        "change_week":       row.get("change_week"),
+        "change_month":      row.get("change_month"),
         "market_cap":        row.get("market_cap"),
         "volume_24h":        row.get("volume_24h"),
         "sector":            row.get("sector"),

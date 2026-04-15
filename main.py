@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 # Internal modules — adjust import paths if your project layout differs
-from app.market import build_market_snapshot
+from app.market import build_market_snapshot, fetch_top_performers, generate_market_analysis
 from app.market_meta import MARKET_META
 from app.scraper import get_articles, estimate_price_trend
 
@@ -182,31 +182,44 @@ def signals(
 @app.get(
     "/top-opportunities",
     tags=["signaux"],
-    summary="Top titres achat / vente par score de sentiment",
+    summary="Top titres par performance (Jour, Semaine, Mois)",
 )
 def top_opportunities(
-    limit: int = Query(default=10, ge=1, le=50, description="Nombre d'articles analysés"),
-    top_k: int = Query(default=3, ge=1, le=10, description="Nombre de titres par catégorie"),
+    period: str = Query(
+        default="day",
+        pattern="^(day|week|month)$",
+        description="Période de performance : day | week | month"
+    ),
+    min_volume: int = Query(default=1000, ge=0, description="Volume minimum pour la liquidité"),
 ):
     """
-    Identifie les tickers les plus mentionnés positivement (achat) ou négativement (vente).
-    Basé sur le sentiment des articles — **pas** un conseil en investissement.
+    Identifie les meilleures performances sur le marché selon la période choisie.
+    - **day** : Top 3 du jour
+    - **week** : Top 10 de la semaine
+    - **month** : Top 20 du mois
+    Inclus une analyse heuristique et des conseils en français.
     """
-    data = _safe_get_articles(limit)
-
-    asset_scores: dict[str, int] = {}
-    for item in data:
-        for asset in item.get("assets", []):      # safe: .get() avoids KeyError
-            asset_scores[asset] = asset_scores.get(asset, 0) + item.get("score", 0)
-
-    sorted_assets = sorted(asset_scores.items(), key=lambda x: x[1], reverse=True)
-
-    return {
-        "meilleures_opportunites_achat": [
-            {"ticker": a, "score": s} for a, s in sorted_assets if s > 0
-        ][:top_k],
-        "meilleures_opportunites_vente": [
-            {"ticker": a, "score": s} for a, s in sorted_assets if s < 0
-        ][:top_k],
-        "articles_analyses": len(data),
-    }
+    limit_map = {"day": 3, "week": 10, "month": 20}
+    limit = limit_map.get(period, 3)
+    
+    try:
+        items, err = fetch_top_performers(period=period, limit=limit, min_volume=min_volume)
+        if err:
+            raise HTTPException(status_code=503, detail=f"Erreur TradingView: {err}")
+            
+        analysis = generate_market_analysis(items, period)
+        
+        return {
+            "period": period,
+            "count": len(items),
+            "top_performers": items,
+            "marche_analyse": analysis["analyse"],
+            "conseil_investissement": analysis["conseil"],
+            "source": "tradingview",
+            "disclaimer": "Ces analyses sont générées par heuristique et ne constituent pas un conseil financier officiel."
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("top_opportunities failed")
+        raise HTTPException(status_code=500, detail=str(exc))
