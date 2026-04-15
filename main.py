@@ -5,7 +5,7 @@ Endpoints:
   GET /health               — liveness probe
   GET /status               — app metadata
   GET /market/meta          — static market reference (hours, links)
-  GET /market/snapshot      — MASI, MASI20, top stocks (Drahmi + fallback)
+  GET /market/snapshot      — MASI, MASI20, top stocks (TradingView)
   GET /news                 — latest Medias24 articles
   GET /signals              — sentiment score + price trend heuristic
   GET /top-opportunities    — top buy/sell tickers by sentiment score
@@ -107,8 +107,8 @@ def market_snapshot(
     ),
 ):
     """
-    - **Indices & cours** : API Drahmi (`api.drahmi.app/api/v1`) — données indicatives.
-    - **Fallback** : scraper `casablancabourse.com` pour les indices si Drahmi échoue.
+    - **Indices & cours** : Données TradingView (temps réel indicatif).
+    - **Fallback** : scraper `casablancabourse.com` pour les indices si TradingView échoue.
     - **top_by** : `marketcap` (défaut), `volume`, `abs_variation` (tri par |variation %|).
     - Le champ `partial: true` indique qu'une ou plusieurs sources ont échoué.
     """
