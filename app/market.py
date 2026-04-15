@@ -92,7 +92,8 @@ def fetch_tradingview_stocks() -> tuple[list[dict] | None, str | None]:
             "volume",
             "description",
             "type",
-            "sector"
+            "sector",
+            "RSI"
         ],
         "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
         "range": [0, 100]
@@ -127,6 +128,7 @@ def fetch_tradingview_stocks() -> tuple[list[dict] | None, str | None]:
                 "description":       d[6],
                 "type":              d[7],
                 "sector":            d[8] if len(d) > 8 else None,
+                "rsi":               d[9] if len(d) > 9 else None,
                 "source":            "tradingview"
             })
         
@@ -208,7 +210,7 @@ def fetch_top_performers(
         "options": {"lang": "en"},
         "columns": [
             "name", "close", "change", "Perf.W", "Perf.1M",
-            "market_cap_basic", "volume", "description", "sector"
+            "market_cap_basic", "volume", "description", "sector", "RSI"
         ],
         "sort": {"sortBy": sort_col, "sortOrder": "desc"},
         "range": [0, limit]
@@ -238,6 +240,7 @@ def fetch_top_performers(
                 "volume_24h":        d[6],
                 "description":       d[7],
                 "sector":            d[8],
+                "rsi":               d[9] if len(d) > 9 else None,
                 "source":            "tradingview"
             })
         return out, None
@@ -260,16 +263,26 @@ def generate_market_analysis(items: list[dict], period: str) -> dict:
     
     period_label = {"day": "séance", "week": "semaine", "month": "mois"}.get(period, "période")
     
-    # Heuristic analysis
+    # Heuristic analysis based on performance and technical fatigue
+    overbought = [i for i in items if (i.get("rsi") or 0) > 70]
+    oversold   = [i for i in items if (i.get("rsi") or 0) < 30 and (i.get("rsi") or 0) > 0]
+    
     if avg_perf > 10:
-        analyse = f"Forte volatilité haussière constatée sur cette {period_label}. Les leaders affichent des gains exceptionnels."
-        conseil = "Attention aux prises de bénéfices (pullback) imminent. Ne pas chasser les prix déjà en surachat."
+        analyse = f"Forte volatilité haussière constatée sur cette {period_label}."
+        if overbought:
+            analyse += f" Attention : {len(overbought)} titres sont en zone de surachat technique (RSI > 70)."
+        conseil = "Attention aux prises de bénéfices imminent. Ne pas chasser les prix."
+        if overbought:
+            conseil = "Vigilance accrue : les indicateurs de fatigue suggèrent un repli technique nécessaire avant tout nouvel achat."
     elif avg_perf > 3:
-        analyse = f"Dynamique positive confirmée sur la {period_label}. Le marché semble bien orienté avec des flux acheteurs réguliers."
+        analyse = f"Dynamique positive confirmée sur la {period_label}."
         conseil = "Privilégier les titres avec des fondamentaux solides qui accompagnent le mouvement."
+    elif oversold:
+        analyse = f"Le marché montre des signes de survente sur certains titres ({len(oversold)} valeurs avec RSI < 30)."
+        conseil = "Opportunités d'achat à contre-courant possibles sur les supports majeurs pour un rebond technique."
     else:
         analyse = f"Marché calme ou en consolidation sur cette {period_label}."
-        conseil = "Accumulation sélective possible sur les supports techniques. Surveiller le réveil des volumes."
+        conseil = "Accumulation sélective possible sur les supports techniques."
         
     return {
         "analyse": analyse,
@@ -343,6 +356,7 @@ def _normalise_stock(row: dict) -> dict:
         "variation_percent": row.get("variation_percent") or row.get("change_day"),
         "change_week":       row.get("change_week"),
         "change_month":      row.get("change_month"),
+        "rsi":               row.get("rsi"),
         "market_cap":        row.get("market_cap"),
         "volume_24h":        row.get("volume_24h"),
         "sector":            row.get("sector"),
