@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 # Internal modules — adjust import paths if your project layout differs
-from app.market import build_market_snapshot, fetch_top_performers, generate_market_analysis
+from app.market import build_market_snapshot, fetch_top_performers, generate_market_analysis, get_masi_performance
 from app.market_meta import MARKET_META
 from app.scraper import get_articles, estimate_price_trend
 
@@ -203,14 +203,21 @@ def top_opportunities(
     limit = limit_map.get(period, 3)
     
     try:
+        masi_perf = get_masi_performance() if period == "day" else 0
         items, err = fetch_top_performers(period=period, limit=limit, min_volume=min_volume)
         if err:
             raise HTTPException(status_code=503, detail=f"Erreur TradingView: {err}")
             
-        analysis = generate_market_analysis(items, period)
+        # Add relative performance calculation if not already there
+        for item in items:
+            if "rel_perf" not in item:
+                item["rel_perf"] = (item.get(f"change_{period}") or 0) - masi_perf
+                
+        analysis = generate_market_analysis(items, period, masi_perf=masi_perf)
         
         return {
             "period": period,
+            "masi_performance": masi_perf,
             "count": len(items),
             "top_performers": items,
             "marche_analyse": analysis["analyse"],

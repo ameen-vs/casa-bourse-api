@@ -259,7 +259,17 @@ def fetch_top_performers(
         return None, str(e)
 
 
-def generate_market_analysis(items: list[dict], period: str) -> dict:
+def get_masi_performance() -> float:
+    """Helper to get current MASI performance."""
+    indices, _ = fetch_tradingview_indices()
+    if indices:
+        for idx in indices:
+            if idx.get("code") == "MASI":
+                return idx.get("change_percent") or 0
+    return 0
+
+
+def generate_market_analysis(items: list[dict], period: str, **kwargs) -> dict:
     """
     Generates a localized (French) analysis and advice based on performers.
     """
@@ -273,28 +283,28 @@ def generate_market_analysis(items: list[dict], period: str) -> dict:
     
     period_label = {"day": "séance", "week": "semaine", "month": "mois"}.get(period, "période")
     
-    # Heuristic analysis based on performance, technical fatigue and value
+    # Heuristic analysis based on performance, technical fatigue, value and benchmarking
+    masi_perf = kwargs.get("masi_perf", 0)
     overbought = [i for i in items if (i.get("rsi") or 0) > 70]
     oversold   = [i for i in items if (i.get("rsi") or 0) < 30 and (i.get("rsi") or 0) > 0]
     high_yield = [i for i in items if (i.get("dividend_yield") or 0) > 5]
     good_value = [i for i in items if (i.get("pe_ratio") or 0) > 0 and (i.get("pe_ratio") or 0) < 12]
+    outperform = [i for i in items if (i.get("rel_perf") or 0) > 2] # 2% above MASI
     
     if avg_perf > 10:
         analyse = f"Forte volatilité haussière constatée sur cette {period_label}."
         if overbought:
             analyse += f" Attention : {len(overbought)} titres sont en zone de surachat (RSI > 70)."
         conseil = "Attention aux prises de bénéfices imminent."
-        if overbought:
-            conseil = "Vigilance : les indicateurs de fatigue technique suggèrent un repli imminent."
+    elif outperform and masi_perf < 0:
+        analyse = f"Résilience notable : {len(outperform)} titres affichent une force relative positive malgré un MASI en baisse ({masi_perf:.2f}%)."
+        conseil = "Focus sur les leaders par force relative qui résistent à la baisse du marché."
     elif high_yield:
         analyse = f"Le marché offre des opportunités de rendement stables ({len(high_yield)} valeurs avec un dividende > 5%)."
         conseil = "Idéal pour une stratégie de revenus (cash-flow) axée sur le rendement."
     elif good_value:
         analyse = f"Certaines valeurs présentent des ratios de valorisation attractifs (P/E < 12)."
-        if overbought:
-            conseil = "Attention au surachat technique malgré une valorisation attractive."
-        else:
-            conseil = "Opportunités 'Value' à étudier pour un investissement de moyen/long terme."
+        conseil = "Opportunités 'Value' à étudier pour un investissement de moyen/long terme."
     elif oversold:
         analyse = f"Signes de survente détectés ({len(oversold)} valeurs avec RSI < 30)."
         conseil = "Potentiel de rebond technique à surveiller."
@@ -378,6 +388,7 @@ def _normalise_stock(row: dict) -> dict:
         "pe_ratio":          row.get("pe_ratio"),
         "dividend_yield":    row.get("dividend_yield"),
         "eps":               row.get("eps"),
+        "rel_perf":          row.get("rel_perf"),
         "market_cap":        row.get("market_cap"),
         "volume_24h":        row.get("volume_24h"),
         "sector":            row.get("sector"),
@@ -421,18 +432,29 @@ def build_market_snapshot(top_n: int = 10, top_by: str = "marketcap") -> dict[st
     if raw_stocks:
         ranked    = _sort_stocks(raw_stocks, top_by)
         top_stocks = [_normalise_stock(r) for r in ranked[:top_n]]
-    else:
-        top_stocks = []
-
     # 3. Pull out MASI / MASI20 for convenience
     masi = masi20 = None
+    masi_perf = 0
     if indices:
         for x in indices:
             c = (x.get("code") or "").upper()
             if c == "MASI":
                 masi = x
+                masi_perf = x.get("change_percent") or 0
             elif c in ("MASI20", "MASI 20", "MSI20"):
                 masi20 = x
+
+    # 4. Calculate relative performance for stocks
+    if raw_stocks:
+        for s in raw_stocks:
+            stock_perf = s.get("variation_percent") or 0
+            s["rel_perf"] = stock_perf - masi_perf
+
+    if raw_stocks:
+        ranked    = _sort_stocks(raw_stocks, top_by)
+        top_stocks = [_normalise_stock(r) for r in ranked[:top_n]]
+    else:
+        top_stocks = []
 
     result = {
         "fetched_at": _utc_now_iso(),
