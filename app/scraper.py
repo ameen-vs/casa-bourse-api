@@ -101,26 +101,27 @@ def get_articles(limit=10):
     articles = []
     seen = set()
 
-    # Broad container search:
-    for container in soup.select(".td-module-container, .td_module_wrap, article, .td-block-span12"):
-        title_tag = container.select_one(".td-module-title a, h3 a, h2 a, .entry-title a")
+    # Medias24 'Le Boursier' section uses h1.title-actus and div.description-recent
+    # We also check for the older .td-module-container just in case.
+    for container in soup.select(".holde-actus-info, .description-recent, article, .td-module-container"):
+        title_tag = container.select_one("h1.title-actus a, .td-module-title a, h3 a, h2 a, a")
         if not title_tag:
-            # Fallback for direct links
-            title_tag = container.select_one("a[href*='medias24.com']")
-            if not title_tag or len(title_tag.get_text(strip=True)) < 20: 
-                continue
+            continue
             
         title = title_tag.get_text(strip=True)
         href = title_tag.get("href")
         
-        # Try to find a snippet
-        snippet_tag = container.select_one(".td-excerpt, p, .entry-content p")
-        snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+        # Determine snippet - often a sibling div or inside description-recent
+        snippet = ""
+        snippet_tag = container.select_one("div.description-recent a, .td-excerpt, p")
+        if snippet_tag:
+            snippet = snippet_tag.get_text(strip=True)
 
         if not title or not href or href in seen:
             continue
         
-        if "medias24.com" not in href:
+        # Filter for article-like links (usually have date patterns or specific paths)
+        if "medias24.com" not in href or len(title) < 20:
             continue
 
         seen.add(href)
@@ -137,5 +138,23 @@ def get_articles(limit=10):
 
         if len(articles) >= limit:
             break
+
+    # Final fallback: if still empty, find any link with a date-like pattern in URL
+    if not articles:
+        import re
+        for a in soup.find_all("a", href=True):
+            href = a.get("href")
+            title = a.get_text(strip=True)
+            if re.search(r"/\d{4}/\d{2}/\d{2}/", href) and len(title) > 30 and href not in seen:
+                seen.add(href)
+                articles.append({
+                    "title": title,
+                    "url": href,
+                    "snippet": "",
+                    "assets": detect_assets(title),
+                    "sentiment": "neutral",
+                    "score": 0
+                })
+                if len(articles) >= limit: break
 
     return articles
