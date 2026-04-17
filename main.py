@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 # Internal modules — adjust import paths if your project layout differs
 from app.market import build_market_snapshot, fetch_top_performers, generate_market_analysis, get_masi_performance
+from app.broker import get_stock_details
 from app.market_meta import MARKET_META
 from app.scraper import get_articles, estimate_price_trend
 
@@ -230,3 +231,40 @@ def top_opportunities(
     except Exception as exc:
         logger.exception("top_opportunities failed")
         raise HTTPException(status_code=500, detail=str(exc))
+@app.get(
+    "/stock/details",
+    tags=["courtage"],
+    summary="Détails profonds du broker (Carnet d'ordres, Transactions)",
+)
+def stock_details(
+    ticker: str = Query(..., description="Le ticker de l'action (ex: IAM, ATW, SODEP)"),
+):
+    """
+    Retourne les données temps-réel du carnet d'ordres et les dernières transactions
+    pour une analyse technique et de flux approfondie.
+    """
+    data, err = get_stock_details(ticker.upper())
+    if err:
+        raise HTTPException(status_code=404, detail=err)
+    
+    # 1. Volume Imbalance Calculation
+    carnet = data["details_broker"]["carnet_ordres"]
+    bid_vol = sum(b["quantity"] for b in carnet["bid"])
+    ask_vol = sum(a["quantity"] for a in carnet["ask"])
+    
+    pressure_hint = "Équilibre relatif"
+    if bid_vol > ask_vol * 1.5:
+        pressure_hint = "Forte pression acheteuse (Mur d'achat)"
+    elif ask_vol > bid_vol * 1.5:
+        pressure_hint = "Forte pression vendeuse (Résistance)"
+
+    # 2. Combined technical hint if available
+    technicals = data.get("analyse_generale")
+    rsi_hint = ""
+    if technicals and technicals.get("rsi"):
+        rsi = technicals["rsi"]
+        if rsi > 70: rsi_hint = " | ATTENTION: Surachat technique (RSI > 70)"
+        elif rsi < 30: rsi_hint = " | OPPORTUNITÉ: Survente technique (RSI < 30)"
+
+    data["smart_analysis_hint"] = f"{pressure_hint}{rsi_hint}"
+    return data

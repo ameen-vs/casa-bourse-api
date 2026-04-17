@@ -492,3 +492,38 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     snapshot = build_market_snapshot(top_n=5, top_by="marketcap")
     pprint.pprint(snapshot)
+
+def get_ticker_metrics(ticker: str):
+    """Fetches high-level RSI/PE/Yield metrics for a single ticker."""
+    try:
+        # Use a targeted query for just this ticker
+        payload = {
+            "filter": [
+                {"left": "exchange", "operation": "equal", "right": "CSEMA"},
+                {"left": "name", "operation": "equal", "right": ticker.upper()}
+            ],
+            "options": {"lang": "en"},
+            "symbols": {"query": {"types": []}, "tickers": []},
+            "columns": ["name", "close", "RSI", "price_earnings_ttm", "dividend_yield_recent", "earnings_per_share_basic_ttm", "change"],
+            "sort": {"sortBy": "name", "sortOrder": "asc"},
+            "range": [0, 1]
+        }
+        
+        r = requests.post(TRADINGVIEW_SCANNER_URL, json=payload, headers=HEADERS, timeout=10)
+        r.raise_for_status()
+        data = r.json().get("data", [])
+        
+        if not data:
+            return None
+            
+        d = data[0]["d"]
+        return {
+            "rsi": d[2],
+            "pe": d[3],
+            "yield": d[4],
+            "eps": d[5],
+            "change_day": d[6]
+        }
+    except Exception as e:
+        logger.error("Failed to fetch metrics for %s: %s", ticker, e)
+        return None
