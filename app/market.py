@@ -495,13 +495,24 @@ if __name__ == "__main__":
 
 def get_ticker_metrics(ticker: str):
     """Fetches high-level RSI/PE/Yield metrics for a single ticker."""
-    # TradingView often uses different tickers than the broker
-    # Mapping: Broker_Ticker -> TradingView_Name
+    # Master Alignment Matrix: Broker/Common Name -> TradingView Ticker
     ALIASES = {
-        "SODEP": "MSA",
-        "MARSA": "MSA",
-        "MAROC TELECOM": "IAM",
-        "ATTIJARIWAFA": "ATW"
+        "AFMA": "AFMA", "ATLANTASANAD": "ASMA", "Addoha": "ADH", "ADDOHA": "ADH", "ADHDOHA": "ADH",
+        "Afric Indus.": "AFI", "Afriquia Gaz": "AFG", "Agma": "AGM", "Akdital": "AKT", "Alliances": "ADI",
+        "Aluminium Maroc": "ALM", "Aradei Capital": "ARD", "Attijariwafa Bank": "ATW", "ATW": "ATW",
+        "Auto Hall": "ATH", "Auto Nejma": "NEJ", "BCP": "BCP", "BMCI": "BCI", "Balima": "BAL", "BoA": "BOA",
+        "CDM": "CDM", "CFG Bank": "CFG", "CIH": "CIH", "CMT": "CMT", "COSUMAR": "CSM", "CTM": "CTM",
+        "Cartier Saada": "CRS", "Ciments Maroc": "CMA", "Colorado": "COL", "DISWAY": "DWY", "Dari Couspate": "DRI",
+        "Delattre Lev.": "DLM", "Delta Holding": "DHO", "Disty Technolog": "DYT", "EQDOM": "EQD", "Ennakl": "NKL",
+        "FENIE BROSSETTE": "FBR", "HPS": "HPS", "IBMaroc.com": "IBM", "INVOLYS": "INV", "Immorente": "IMO",
+        "Jet Contractors": "JET", "LABEL VIE": "LBV", "LafargeHolcim": "LHM", "LHM": "LHM", "Lesieur Cristal": "LES",
+        "M2M Group": "M2M", "Maghreb Oxygene": "MOX", "Maghrebail": "MAB", "Managem": "MNG", "MNG": "MNG",
+        "Maroc Leasing": "MLE", "Maroc Telecom": "IAM", "IAM": "IAM", "Med Paper": "PAP", "Microdata": "MIC",
+        "Mutandis": "MUT", "Oulmes": "OUL", "PROMOPHARM": "PRO", "Rebab Company": "REB", "Resid Dar Saada": "RDS",
+        "Risma": "RIS", "S2M": "S2M", "SALAFIN": "SLF", "SMI": "SMI", "SNA": "SNA", "SNEP": "SNP", "SNP": "SNP",
+        "SODEP": "MSA", "MSA": "MSA", "MARSA": "MSA", "SOTHEMA": "SOT", "SOT": "SOT", "SRM": "SRM", "STROC Indus.": "STR",
+        "Sanlam Maroc": "SAH", "Sonasid": "SID", "Ste Boissons": "SBM", "TAQA Morocco": "TQM", "TGCC": "TGC", "TGC": "TGC",
+        "TotalEnergie MM": "TMA", "Unimer": "UMR", "Vicenne": "VCN", "Wafa Assur": "WAA", "Zellidja": "ZDJ"
     }
     
     tv_ticker = ALIASES.get(ticker.upper(), ticker.upper())
