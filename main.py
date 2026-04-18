@@ -237,18 +237,25 @@ def top_opportunities(
     summary="Détails profonds du broker (Carnet d'ordres, Transactions)",
 )
 def stock_details(
-    ticker: str = Query(..., description="Le ticker de l'action (ex: IAM, ATW, SODEP)"),
+    ticker: Optional[str] = Query(None, description="Le ticker de l'action (ex: IAM, ATW, SODEP)"),
 ):
     """
-    Retourne les données temps-réel du carnet d'ordres et les dernières transactions
+    Retourne les données temps-réel (Analyse, Carnet d'ordres, Transactions, Graphique)
     pour une analyse technique et de flux approfondie.
     """
+    if not ticker:
+        raise HTTPException(
+            status_code=400, 
+            detail="EROC: Ticker manquant. Veuillez appeler getStockDetails(ticker='SYMBOLE')."
+        )
+
     data, err = get_stock_details(ticker.upper())
     if err:
         raise HTTPException(status_code=404, detail=err)
     
     # 1. Volume Imbalance Calculation
-    carnet = data["details_broker"]["carnet_ordres"]
+    broker = data["details_broker"]
+    carnet = broker["carnet_ordres"]
     bid_vol = sum(b["quantity"] for b in carnet["bid"])
     ask_vol = sum(a["quantity"] for a in carnet["ask"])
     
@@ -258,7 +265,7 @@ def stock_details(
     elif ask_vol > bid_vol * 1.5:
         pressure_hint = "Forte pression vendeuse (Résistance)"
 
-    # 2. Combined technical hint if available
+    # 2. Combined technical hint
     technicals = data.get("analyse_generale")
     rsi_hint = ""
     if technicals and technicals.get("rsi"):
@@ -266,5 +273,15 @@ def stock_details(
         if rsi > 70: rsi_hint = " | ATTENTION: Surachat technique (RSI > 70)"
         elif rsi < 30: rsi_hint = " | OPPORTUNITÉ: Survente technique (RSI < 30)"
 
-    data["smart_analysis_hint"] = f"{pressure_hint}{rsi_hint}"
-    return data
+    # Flatten slightly for agent ease
+    return {
+        "ticker": data["ticker"],
+        "lid": data["lid"],
+        "smart_analysis_hint": f"{pressure_hint}{rsi_hint}",
+        "analyse_generale": data["analyse_generale"],
+        "graphique_intraday": broker["graphique"],
+        "cotations": broker["cotations"],
+        "carnet_ordres": broker["carnet_ordres"],
+        "derniere_transactions": broker["transactions"],
+        "source": data["source"]
+    }

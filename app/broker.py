@@ -14,7 +14,6 @@ HEADERS = {
 }
 
 BASE_DETAILS_URL = "https://www.bmcecapitalbourse.com/bkbbourse/details/"
-INTRADAY_URL = "https://www.bmcecapitalbourse.com/bkbbourse/ajax/details/intraday"
 
 # Load mapping
 MAPPING_PATH = os.path.join(os.path.dirname(__file__), "broker_mapping.json")
@@ -176,14 +175,25 @@ def _extract_quotation_details(soup):
     return data
 
 def _fetch_intraday(lid):
-    """Calls the JSON API for intraday chart data."""
-    params = {"lid": lid}
+    """Calls the NEW JSON API for intraday chart data."""
+    # New endpoint discovered after structural change
+    # https://www.bmcecapitalbourse.com/bkbbourse/api/series/intraday
+    url = "https://www.bmcecapitalbourse.com/bkbbourse/api/series/intraday"
+    params = {
+        "decorator": "ajax",
+        "lid": lid,
+        "mode": "snap",
+        "period": "1m",
+        "max": "1250"
+    }
     try:
-        r = requests.get(INTRADAY_URL, params=params, headers=HEADERS, timeout=10)
+        r = requests.get(url, params=params, headers=HEADERS, timeout=10)
         if r.status_code == 200:
             return r.json()
-    except:
-        pass
+        else:
+            logger.error("Intraday status code %s for lid %s", r.status_code, lid)
+    except Exception as e:
+        logger.error("Failed to fetch intraday for %s: %s", lid, e)
     return None
 
 if __name__ == "__main__":

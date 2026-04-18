@@ -509,7 +509,7 @@ def get_ticker_metrics(ticker: str):
             "range": [0, 1]
         }
         
-        r = requests.post(TRADINGVIEW_SCANNER_URL, json=payload, headers=HEADERS, timeout=10)
+        r = requests.post(TRADINGVIEW_SCANNER_URL, json=payload, headers=HTTP_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json().get("data", [])
         
