@@ -495,12 +495,23 @@ if __name__ == "__main__":
 
 def get_ticker_metrics(ticker: str):
     """Fetches high-level RSI/PE/Yield metrics for a single ticker."""
+    # TradingView often uses different tickers than the broker
+    # Mapping: Broker_Ticker -> TradingView_Name
+    ALIASES = {
+        "SODEP": "MSA",
+        "MARSA": "MSA",
+        "MAROC TELECOM": "IAM",
+        "ATTIJARIWAFA": "ATW"
+    }
+    
+    tv_ticker = ALIASES.get(ticker.upper(), ticker.upper())
+    
     try:
         # Use a targeted query for just this ticker
         payload = {
             "filter": [
                 {"left": "exchange", "operation": "equal", "right": "CSEMA"},
-                {"left": "name", "operation": "equal", "right": ticker.upper()}
+                {"left": "name", "operation": "equal", "right": tv_ticker}
             ],
             "options": {"lang": "en"},
             "symbols": {"query": {"types": []}, "tickers": []},
