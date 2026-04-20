@@ -50,8 +50,10 @@ def get_stock_details(ticker: str):
         transactions = _extract_transactions(soup)
         quotation = _extract_quotation_details(soup)
         
-        # 3. Fetch Intraday (Charts)
+        # 3. Fetch Tab Data (Intraday, History, Statistics)
         intraday = _fetch_intraday(lid)
+        historique = _fetch_historique(lid)
+        statistiques = _fetch_statistiques(lid)
         
         # 4. Fetch TradingView Metrics (Elite Analysis)
         metrics = get_ticker_metrics(ticker)
@@ -64,7 +66,9 @@ def get_stock_details(ticker: str):
                 "graphique": intraday,
                 "cotations": quotation,
                 "carnet_ordres": order_book,
-                "transactions": transactions
+                "transactions": transactions,
+                "historique": historique,
+                "statistiques": statistiques
             },
             "source": "BMCE Capital Bourse + TradingView"
         }, None
@@ -195,6 +199,98 @@ def _fetch_intraday(lid):
     except Exception as e:
         logger.error("Failed to fetch intraday for %s: %s", lid, e)
     return None
+
+def _fetch_historique(lid):
+    """Scrapes historical daily data from the HIKU endpoint."""
+    url = f"https://www.bmcecapitalbourse.com/bkbbourse/details/hiku/{lid}"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            history = []
+            table = soup.find("table")
+            if table:
+                # Headers: Date, Ouverture, Dernier, + Haut, + Bas, Quantité, Volume, Variation %
+                for row in table.find_all("tr")[1:61]: # Extract up to ~60 days max for performance
+                    cols = row.find_all("td")
+                    if len(cols) >= 8:
+                        try:
+                            # Clean spaces and commas
+                            def clean_float(t): return float(t.replace(" ", "").replace("\xa0", "").replace("\u202f", "").replace(",", "."))
+                            def clean_int(t): return int(t.replace(" ", "").replace("\xa0", "").replace("\u202f", "").replace(",", "").split(".")[0])
+                            
+                            history.append({
+                                "date": cols[0].text.strip(),
+                                "open": clean_float(cols[1].text.strip()),
+                                "close": clean_float(cols[2].text.strip()),
+                                "high": clean_float(cols[3].text.strip()),
+                                "low": clean_float(cols[4].text.strip()),
+                                "quantity": clean_int(cols[5].text.strip()),
+                                "volume": clean_int(cols[6].text.strip()),
+                                "change_pct": cols[7].text.strip()
+                            })
+                        except Exception as e:
+                            logger.error(f"Error parsing hiku row: {e}")
+                            continue
+            return history
+    except Exception as e:
+        logger.error("Failed to fetch historique for %s: %s", lid, e)
+    return []
+
+def _fetch_statistiques(lid):
+    """Scrapes company stats and dividend history from the STATISTICS endpoint."""
+    url = f"https://www.bmcecapitalbourse.com/bkbbourse/details/statistics/{lid}"
+    stats_data = {"metrics": {}, "dividends": []}
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            
+            # 1. Look for the general statistics rows (often strong or specific spans)
+            for li in soup.find_all("li", class_="row"):
+                label = li.find("strong")
+                val = li.find("span", class_="valeur")
+                if label and val:
+                    key = label.text.strip().replace(":", "")
+                    stats_data["metrics"][key] = val.text.strip().replace("\xa0", " ").replace("\u202f", " ")
+                    
+            # Look for table-based structures
+            for tr in soup.find_all("tr"):
+                th = tr.find("th")
+                tds = tr.find_all("td")
+                
+                # Format 1: TH and TD (e.g., Capitalisation boursière, Secteur)
+                if th and len(tds) == 1:
+                    k = th.text.strip().replace(":", "")
+                    v = tds[0].text.strip().replace("\xa0", " ").replace("\u202f", " ")
+                    if k and v:
+                        stats_data["metrics"][k] = v
+                
+                # Format 2: TD and TD (e.g., Shareholders data)
+                elif len(tds) == 2 and not th:
+                    k = tds[0].text.strip()
+                    v = tds[1].text.strip().replace("\xa0", " ").replace("\u202f", " ")
+                    if k and v and "Année" not in k:
+                        stats_data["metrics"][k] = v
+
+                # Format 3: Dividends (5 columns)
+                elif len(tds) >= 5:
+                    try:
+                        yr=tds[0].text.strip()
+                        if yr.isdigit():
+                            stats_data["dividends"].append({
+                                "year": yr,
+                                "date_detachement": tds[1].text.strip(),
+                                "date_paiement": tds[2].text.strip(),
+                                "montant_brut": tds[3].text.strip().replace(",", "."),
+                                "montant_net": tds[4].text.strip().replace(",", ".")
+                            })
+                    except: continue
+                    
+            return stats_data
+    except Exception as e:
+        logger.error("Failed to fetch statistiques for %s: %s", lid, e)
+    return stats_data
 
 if __name__ == "__main__":
     # Test script

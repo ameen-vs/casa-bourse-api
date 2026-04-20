@@ -284,5 +284,8 @@ def stock_details(
         "cotations": broker["cotations"],
         "carnet_ordres": broker["carnet_ordres"],
         "derniere_transactions": broker["transactions"],
+        "historique_recent": broker.get("historique", []),
+        "statistiques_broker": broker.get("statistiques", {}),
         "source": data["source"]
     }
+
